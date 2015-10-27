@@ -2,13 +2,17 @@
 1C-dtools
 ============
 
+.. image:: https://img.shields.io/pypi/v/1C-dtools.svg
+    :target: https://pypi.python.org/pypi/1C-dtools
+.. image:: https://img.shields.io/pypi/l/1C-dtools.svg
+
 ``1C-dtools`` - библиотека для работы с файлами данных 1С:Предприятие 8 (1CD, cf, и т.д.)
 
 Установка
 ===============
 ::
 
-    pip install 1c-dtools
+    pip install 1c-dtools 
 
 Использование
 ===============
@@ -20,11 +24,11 @@
         db = oneс_dtools.Database(f)
         print("База данных 1С (вер. {}/{})".format(db.version, db.locale))
         print("Всего таблиц: {}".format(len(db.description)))
-
+    
         table_name = 'V8USERS'
         for row in db.read_table(table_name):
             print(row)
-
+    
 История версий
 ===============
 0.0.1
