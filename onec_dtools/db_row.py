@@ -11,7 +11,7 @@ Image = collections.namedtuple('Image', 'offset, size')
 def numeric_to_int(numeric, precision):
     """Преобразуем Numeric формат 1С в число"""
     sign = {0: '-', 1: ''}
-    hex_str = numeric.hex()
+    hex_str = ''.join('{:02X}'.format(byte) for byte in numeric)
     if precision:
         result = ''.join([sign.get(int(hex_str[0])), hex_str[1:-precision], '.', hex_str[-precision:]])
         return float(result)
@@ -63,7 +63,8 @@ def get_field_parser_info(field_description):
     elif field_description.type == 'DT':
         # У пустой даты год = 0000
         return FieldParserInfo(7,
-                               lambda x: None if x[:2] == b'\x00\x00' else datetime.strptime(x.hex(), '%Y%m%d%H%M%S'))
+                               lambda x: None if x[:2] == b'\x00\x00' else datetime.strptime(
+                                   ''.join('{:02X}'.format(byte) for byte in x), '%Y%m%d%H%M%S'))
 
 
 def get_null_field_parser_info(field_description):
@@ -90,7 +91,8 @@ class Row(object):
         offset = 17 if table_description.row_version else 1
         for field_name, field_description in table_description.fields.items():
             field_length, conversion_fn = get_null_field_parser_info(field_description)
-            self.columns.append(RowColumn(field_name, field_length, offset if field_description.type != 'RV' else 1, conversion_fn))
+            self.columns.append(
+                RowColumn(field_name, field_length, offset if field_description.type != 'RV' else 1, conversion_fn))
             offset += field_length if field_description.type != 'RV' else 0
             self.length += field_length
 
