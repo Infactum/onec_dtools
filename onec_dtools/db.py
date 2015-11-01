@@ -91,6 +91,7 @@ def read_full_object(db_file, object_offset):
 
 
 def read_blob_from_offset(db_file, blob_offset, blob_chunk_offset):
+    """Получает генератор для чтения Blob данных и позиционирует его на указанном смещении"""
     blob = read_object(db_file, blob_offset, BLOB_CHUNK_SIZE).data
     for _ in range(blob_chunk_offset):
         next(blob)
@@ -98,6 +99,10 @@ def read_blob_from_offset(db_file, blob_offset, blob_chunk_offset):
 
 
 def read_value_from_blob(db_file, blob_offset, blob_chunk_index, decorator):
+    """
+    Читает значение blob данных по указанному смещению.
+    Возвращает decorator(данные) - необходимо для удобного преобразования значений полей типа Image и NText
+    """
     blob = read_blob_from_offset(db_file, blob_offset, blob_chunk_index)
     while True:
         buffer = next(blob)
