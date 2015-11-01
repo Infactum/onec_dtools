@@ -151,7 +151,9 @@ def parse_table_description(raw_description):
             raise ValueError("RAW field description doesn't match required format")
         if res.group(2) == 'RV':
             row_version = True
-        fields[res.group(1)] = FieldDescription(*[int(x) if x.isdigit() else x for x in res.groups()[1:]])
+        name, field_type, null_exists, length, precision, case_sensitive = res.groups()
+        fields[name] = FieldDescription(field_type, bool(int(null_exists)), int(length), int(precision),
+                                        True if case_sensitive == 'CS' else False)
 
     # информация об индексах таблицы пока не имеет практического применения, поэтому ее не разбираем
     # текстовое описание индексов в result.group(3)
