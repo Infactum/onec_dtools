@@ -7,10 +7,10 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='1C-dtools',
-    version='0.0.1',
+    name='onec_dtools',
+    version='0.0.3',
     packages=['onec_dtools'],
-    url='https://github.com/Infactum/1C-dtools',
+    url='https://github.com/Infactum/onec_dtools',
     license='MIT',
     author='infactum',
     author_email='infactum@gmail.com',
