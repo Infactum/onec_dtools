@@ -8,7 +8,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='onec_dtools',
-    version='0.0.3',
+    version='0.1.0',
     packages=['onec_dtools'],
     url='https://github.com/Infactum/onec_dtools',
     license='MIT',

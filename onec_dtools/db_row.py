@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 from struct import unpack
 import collections
-from _datetime import datetime
+import datetime as dt
 
 FieldParserInfo = collections.namedtuple('FieldDecoder', 'length, conversion_fn')
 RowColumn = collections.namedtuple('RowColumn', 'name, length, offset, conversion_fn')
@@ -9,7 +10,10 @@ Image = collections.namedtuple('Image', 'offset, size')
 
 
 def numeric_to_int(numeric, precision):
-    """Преобразуем Numeric формат 1С в число"""
+    """Преобразуем Numeric формат 1С в число.
+    :param numeric: число в формате numeric
+    :param precision: точность
+    """
     sign = {0: '-', 1: ''}
     hex_str = ''.join('{:02X}'.format(byte) for byte in numeric)
     if precision:
@@ -21,7 +25,9 @@ def numeric_to_int(numeric, precision):
 
 
 def nvc_to_string(nvc):
-    """Преобразует NVarChar формат 1С в строку"""
+    """Преобразует NVarChar формат 1С в строку.
+    :param nvc: строка в формате NVC
+    """
     length, = unpack('H', nvc[:2])
     if not length:
         return ''
@@ -33,7 +39,8 @@ def nvc_to_string(nvc):
 def get_field_parser_info(field_description):
     """
     Возвращает данные для парсера строк файлов записей БД 1С: длину значения колонки (байт) и функцию преобразования
-    из массива байт в значение
+    из массива байт в значение.
+    :param field_description: описание полей таблицы БД
     """
     if field_description.type == 'B':
         # Бинарные данные оставляем в чисто виде
@@ -63,14 +70,15 @@ def get_field_parser_info(field_description):
     elif field_description.type == 'DT':
         # У пустой даты год = 0000
         return FieldParserInfo(7,
-                               lambda x: None if x[:2] == b'\x00\x00' else datetime.strptime(
+                               lambda x: None if x[:2] == b'\x00\x00' else dt.datetime.strptime(
                                    ''.join('{:02X}'.format(byte) for byte in x), '%Y%m%d%H%M%S'))
 
 
 def get_null_field_parser_info(field_description):
     """
-    Обертка над get_field_parser_info. Корректирует данные с учетом того, что значение колонки может принимать NULL
-    Для полей, содержащих NULL, функция преобразования будет возвращать None
+    Обертка над get_field_parser_info. Корректирует данные с учетом того, что значение колонки может принимать NULL.
+    Для полей, содержащих NULL, функция преобразования будет возвращать None.
+    :param field_description: описание полей таблицы БД
     """
     fpi = get_field_parser_info(field_description)
     if field_description.null_exists:
@@ -97,5 +105,7 @@ class Row(object):
             self.length += field_length
 
     def parse(self, buffer):
-        """Возвращает словарь колонок и их значений"""
+        """Возвращает словарь колонок и их значений.
+        :param buffer: последовательность байт, содержащая данные 1й строки
+        """
         return {c.name: c.conversion_fn(buffer[c.offset:c.offset + c.length]) for c in self.columns}

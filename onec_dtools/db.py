@@ -1,8 +1,8 @@
+# -*- coding: utf-8 -*-
 from struct import unpack, calcsize
 import collections
-import re
-import textwrap
 from onec_dtools.db_row import Row
+import onec_dtools.serialization
 
 PAGE_SIZE = 4096
 ROOT_OBJECT_OFFSET = 2
@@ -20,7 +20,9 @@ NValue = collections.namedtuple('NValue', 'size, data')
 
 
 def database_header(db_file):
-    """Возвращает версию формата и количество страниц БД"""
+    """Возвращает версию формата и количество страниц БД.
+    :param db_file: объект файла БД
+    """
     fmt = '8s4bI'
     buffer = db_file.read(calcsize(fmt))
     data = unpack(fmt, buffer)
@@ -31,7 +33,9 @@ def database_header(db_file):
 
 
 def root_object(db_file):
-    """Возвращает язык и кортеж смещений объектов описания таблиц БД"""
+    """Возвращает язык и кортеж смещений объектов описания таблиц БД.
+    :param db_file: объект файла БД
+    """
     buffer = read_full_object(db_file, ROOT_OBJECT_OFFSET).data
 
     fmt = '32si'
@@ -48,7 +52,10 @@ def read_object_gen(db_file, object_offset, chunk_size=4096):
     """
     Возвращает генератор с данными объета БД.
     Первое значение генератора - размер данных объекта (байт).
-    Остальные значения генератора - данные объета, порциями по chunk_size байт
+    Остальные значения генератора - данные объета, порциями по chunk_size байт.
+    :param chunk_size: размер порции (байт)
+    :param object_offset: смещение объекта в файле
+    :param db_file: объект файла БД
     """
 
     db_file.seek(PAGE_SIZE * object_offset)
@@ -78,20 +85,31 @@ def read_object_gen(db_file, object_offset, chunk_size=4096):
 
 
 def read_object(db_file, object_offset, chunk_size=4096):
-    """Обертка над механизмом кусочного чтения объета БД. Разделяет длину объета и генератор с его данными"""
+    """Обертка над механизмом кусочного чтения объета БД. Разделяет длину объета и генератор с его данными.
+    :param chunk_size: размер порции (байт)
+    :param object_offset: смещение объекта в файле
+    :param db_file: объект файла БД
+    """
     gen = read_object_gen(db_file, object_offset, chunk_size)
     length = next(gen)
     return DBObject(length, gen)
 
 
 def read_full_object(db_file, object_offset):
-    """Возвращает объет БД целиком. Во избежание лишнего расхода памяти применять только для инициализаци"""
+    """Возвращает объет БД целиком. Во избежание лишнего расхода памяти применять только для инициализаци.
+    :param object_offset: смещение объекта в файле
+    :param db_file: объект файла БД
+    """
     db_object = read_object(db_file, object_offset)
     return DBObject(db_object.length, b''.join([chunk for chunk in db_object.data]))
 
 
 def read_blob_from_offset(db_file, blob_offset, blob_chunk_offset):
-    """Получает генератор для чтения Blob данных и позиционирует его на указанном смещении"""
+    """Получает генератор для чтения Blob данных и позиционирует его на указанном смещении.
+    :param blob_chunk_offset: смещение порции данных внутри BLOB
+    :param blob_offset: смещение BLOB внутри файла БД
+    :param db_file: объект файла БД
+    """
     blob = read_object(db_file, blob_offset, BLOB_CHUNK_SIZE).data
     for _ in range(blob_chunk_offset):
         next(blob)
@@ -101,7 +119,11 @@ def read_blob_from_offset(db_file, blob_offset, blob_chunk_offset):
 def read_value_from_blob(db_file, blob_offset, blob_chunk_index, decorator):
     """
     Читает значение blob данных по указанному смещению.
-    Возвращает decorator(данные) - необходимо для удобного преобразования значений полей типа Image и NText
+    Возвращает decorator(данные) - необходимо для удобного преобразования значений полей типа Image и NText.
+    :param decorator: функция приобразования считанных данных
+    :param blob_chunk_index: смещение порции данных внутри BLOB
+    :param blob_offset: смещение BLOB внутри файла БД
+    :param db_file: объект файла БД
     """
     blob = read_blob_from_offset(db_file, blob_offset, blob_chunk_index)
     while True:
@@ -121,50 +143,32 @@ def read_value_from_blob(db_file, blob_offset, blob_chunk_index, decorator):
 
 
 def raw_tables_descriptions(db_file, tables_offsets):
-    """Возвращает список со строковыми описаниями (внутренний формат) таблиц БД"""
+    """Возвращает список со строковыми описаниями (внутренний формат) таблиц БД.
+    :param tables_offsets: смещение описания таблиц БД в файле БД
+    :param db_file: объект файла БД
+    """
     return [read_full_object(db_file, offset).data.decode('utf-16').rstrip('\x00') for offset in tables_offsets]
 
 
 def parse_table_description(raw_description):
-    """Обрабатывает строковое описание таблиц БД. Возвращает именованый кортеж."""
-    pattern_text = """
-                    \{"(\S+)".*
-                    \{"Fields",
-                    ([\s\S]*)
-                    \},
-                    \{"Indexes"(?:,|)([\s\S]*)\},
-                    \{"Recordlock","(\d)+"\},
-                    \{"Files",(\S+)\}
-                    \}
-                    """
-    pattern_text = textwrap.dedent(pattern_text).strip()
-    pattern = re.compile(pattern_text)
-    result = pattern.match(raw_description)
-    if result is None:
-        # формат описания таблиц не соответствует ожиданию
-        raise ValueError("RAW table description doesn't match required format")
-
-    # разбор описания полей таблицы
-    pattern = re.compile('\{"(\w+)","(\w+)",(\d+),(\d+),(\d+),"(\w+)"\}(?:,|)')
+    """Возвращает разобранное описание таблицы БД
+    :param raw_description: Строковое опиание таблицы БД
+    """
     fields = collections.OrderedDict()
     # показывает, что в таблице есть поле типа RV
     # необходимо для корректного чтения файла данных
     row_version = False
-    for field_str in result.group(2).splitlines():
-        res = pattern.match(field_str)
-        if res is None:
-            raise ValueError("RAW field description doesn't match required format")
-        if res.group(2) == 'RV':
+    description = onec_dtools.serialization.deserialize(raw_description)
+
+    for field_description in description[2][1:]:
+        name, field_type, null_exists, length, precision, case_sensitive = field_description
+        if field_type == 'RV':
             row_version = True
-        name, field_type, null_exists, length, precision, case_sensitive = res.groups()
-        fields[name] = FieldDescription(field_type, bool(int(null_exists)), int(length), int(precision),
+        fields[name] = FieldDescription(field_type, bool(null_exists), length, precision,
                                         True if case_sensitive == 'CS' else False)
 
     # информация об индексах таблицы пока не имеет практического применения, поэтому ее не разбираем
-    # текстовое описание индексов в result.group(3)
-
-    return TableDescription(result.group(1), fields, int(result.group(4)), row_version,
-                            *[int(x) for x in result.group(5).split(",")])
+    return TableDescription(description[0], fields, description[4][1], row_version, *description[5][1:])
 
 
 class Database(object):
@@ -180,7 +184,9 @@ class Database(object):
             self.description[table_description.name] = table_description
 
     def read_table(self, table_name):
-        """Читает таблицу БД построчно"""
+        """Читает таблицу БД построчно.
+        :param table_name: Имя таблицы БД
+        """
         table_description = self.description[table_name]
         # словарь полей неограниченной длины в текущей таблице
         unlimited_value_columns = {field_name: field_description.type
@@ -188,7 +194,9 @@ class Database(object):
                                    if field_description.type == 'I' or field_description.type == 'NT'}
 
         def decorator(t):
-            """Возвращает функцию преобразования данных блоба для полей типа Image и NText"""
+            """Возвращает функцию преобразования данных блоба для полей типа Image и NText.
+            :param t: имя типа данных
+            """
             if t == 'I':
                 return lambda x: x
             if t == 'NT':
