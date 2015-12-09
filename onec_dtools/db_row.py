@@ -15,7 +15,7 @@ def numeric_to_int(numeric, precision):
     :param precision: точность
     """
     sign = {0: '-', 1: ''}
-    hex_str = ''.join('{:02X}'.format(byte) for byte in numeric)
+    hex_str = ''.join('{:02X}'.format(ord(byte)) for byte in numeric)
     if precision:
         result = ''.join([sign.get(int(hex_str[0])), hex_str[1:-precision], '.', hex_str[-precision:]])
         return float(result)
@@ -71,7 +71,7 @@ def get_field_parser_info(field_description):
         # У пустой даты год = 0000
         return FieldParserInfo(7,
                                lambda x: None if x[:2] == b'\x00\x00' else dt.datetime.strptime(
-                                   ''.join('{:02X}'.format(byte) for byte in x), '%Y%m%d%H%M%S'))
+                                   ''.join('{:02X}'.format(ord(byte)) for byte in x), '%Y%m%d%H%M%S'))
 
 
 def get_null_field_parser_info(field_description):
