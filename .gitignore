@@ -6,4 +6,4 @@ dist/
 __pycache__/
 *.so
 *~
-.idea
+.tox
