@@ -103,6 +103,8 @@ class Row(object):
                 RowColumn(field_name, field_length, offset if field_description.type != 'RV' else 1, conversion_fn))
             offset += field_length if field_description.type != 'RV' else 0
             self.length += field_length
+        # Длина записи не может быть меньше 5
+        self.length = max(self.length, 5)
 
     def parse(self, buffer):
         """Возвращает словарь колонок и их значений.

@@ -147,7 +147,7 @@ def raw_tables_descriptions(db_file, tables_offsets):
     :param tables_offsets: смещение описания таблиц БД в файле БД
     :param db_file: объект файла БД
     """
-    return [read_full_object(db_file, offset).data.decode('utf-16').rstrip('\x00') for offset in tables_offsets]
+    return [(lambda x: x.data[:x.length].decode('utf-16'))(read_full_object(db_file, offset)) for offset in tables_offsets]
 
 
 def parse_table_description(raw_description):
