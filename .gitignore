@@ -1,9 +1,12 @@
-build/
-dist/
-*.egg-info/
 *.egg
 *.py[cod]
-__pycache__/
 *.so
-*~
+*.egg-info/
+
 .tox
+.idea
+
+__pycache__/
+build/
+dist/
+docs/_build/
