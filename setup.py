@@ -10,6 +10,7 @@ setup(
     name='onec_dtools',
     version='0.1.1',
     packages=['onec_dtools'],
+    test_requires=['pytest'],
     url='https://github.com/Infactum/onec_dtools',
     license='MIT',
     author='infactum',

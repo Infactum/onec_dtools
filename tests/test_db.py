@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import pytest
@@ -11,8 +12,15 @@ def db_file(request):
         yield f
 
 
-def test_db(db_file):
+def test_parse_whole_db(db_file):
+    """
+    Тест полностью прочитает всю БД
+    """
     db = onec_dtools.Database(db_file)
     for table in db.description:
-        for _ in db.read_table(table):
-            pass
+        for row in db.read_table(table):
+            for value in row.values():
+                # Чтение полей неограниченной длины
+                if hasattr(value, 'data'):
+                    for _ in value.data:
+                        pass
