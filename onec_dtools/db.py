@@ -234,5 +234,6 @@ class Database(object):
                 gen = read_value_from_blob(self.db_file, table_description.blob_offset,
                                            parsed_row[field_name].offset, decorator(field_type))
                 parsed_row[field_name] = NValue(parsed_row[field_name].size, gen)
+                parsed_row.conversion_fns.pop(field_name, None)
 
             yield parsed_row

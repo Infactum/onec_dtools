@@ -94,6 +94,18 @@ def get_null_field_parser_info(field_description):
         return fpi
 
 
+class RowItem(collections.UserDict):
+    def __init__(self, **kwargs):
+        self.conversion_fns = {}
+        super().__init__(kwargs)
+
+    def __getitem__(self, key):
+        item = super().__getitem__(key)
+        if key in self.conversion_fns:
+            return self.conversion_fns[key](item)
+        return item
+
+
 class Row(object):
     def __init__(self, table_description):
         self.columns = []
@@ -116,4 +128,8 @@ class Row(object):
         """Возвращает словарь колонок и их значений.
         :param buffer: последовательность байт, содержащая данные 1й строки
         """
-        return {c.name: c.conversion_fn(buffer[c.offset:c.offset + c.length]) for c in self.columns}
+        row_item = RowItem()
+        for c in self.columns:
+            row_item[c.name] = buffer[c.offset:c.offset + c.length]
+            row_item.conversion_fns[c.name] = c.conversion_fn
+        return row_item
