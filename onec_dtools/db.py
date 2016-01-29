@@ -65,7 +65,8 @@ def read_object_gen(db_file, object_offset, chunk_size=4096):
     # length
     yield data[1]
 
-    index_pages_offsets = [i for i in data[5:] if i > 0]
+    index_pages_count = (data[1]-1) // (1023 * PAGE_SIZE) + 1
+    index_pages_offsets = [data[5+i] for i in range(index_pages_count)]
     data_pages_offsets = []
 
     for offset in index_pages_offsets:
