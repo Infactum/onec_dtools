@@ -38,6 +38,19 @@ def nvc_to_string(nvc):
     return unpack(fmt, nvc[2:length * 2 + 2])[0].decode('utf-16')
 
 
+def bytes_to_datetime(bts):
+    """
+    Пробразует байтовую строку в дату/время
+    :param bts: байтовая строка
+    """
+    date_string = ''.join('{:02X}'.format(byte) for byte in bts)
+    # У пустой даты год = 0000
+    if bts[:2] == b'\x00\x00':
+        return None
+    return dt.datetime(int(date_string[:4]), int(date_string[4:6]), int(date_string[6:8]),
+                       int(date_string[8:10]), int(date_string[10:12]), int(date_string[12:]))
+
+
 def get_field_parser_info(field_description):
     """
     Возвращает данные для парсера строк файлов записей БД 1С: длину значения колонки (байт) и функцию преобразования
@@ -70,13 +83,6 @@ def get_field_parser_info(field_description):
         # Двоичные данные неограниченной длины
         return FieldParserInfo(8, lambda x: Image(*unpack('2I', x)))
     elif field_description.type == 'DT':
-        def bytes_to_datetime(bts):
-            date_string = ''.join('{:02X}'.format(byte) for byte in bts)
-            # У пустой даты год = 0000
-            if bts[:2] == b'\x00\x00':
-                return None
-            return dt.datetime(int(date_string[:4]), int(date_string[4:6]), int(date_string[6:8]),
-                               int(date_string[8:10]), int(date_string[10:12]), int(date_string[12:]))
         return FieldParserInfo(7, bytes_to_datetime)
 
 
