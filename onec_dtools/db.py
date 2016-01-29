@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from struct import unpack, calcsize
 import collections
+import re
 from onec_dtools.db_row import Row
-import onec_dtools.serialization
 
 PAGE_SIZE = 4096
 ROOT_OBJECT_OFFSET = 2
@@ -18,6 +18,10 @@ TableDescription = collections.namedtuple('TableDescription',
                                            data_offset, blob_offset, index_offset')
 NValue = collections.namedtuple('NValue', 'size, data')
 
+table_description_pattern_text = '\{"(\S+)".*\n\{"Fields",\n([\s\S]*)\n\},\n\{"Indexes"(?:,|)([\s\S]*)\},' \
+                                 '\n\{"Recordlock","(\d)+"\},\n\{"Files",(\S+)\}\n\}'
+table_description_pattern = re.compile(table_description_pattern_text)
+field_description_pattern = re.compile('\{"(\w+)","(\w+)",(\d+),(\d+),(\d+),"(\w+)"\}(?:,|)')
 
 def database_header(db_file):
     """Возвращает версию формата и количество страниц БД.
@@ -155,21 +159,31 @@ def parse_table_description(raw_description):
     """Возвращает разобранное описание таблицы БД
     :param raw_description: Строковое опиание таблицы БД
     """
+    result = table_description_pattern.match(raw_description)
+    if result is None:
+        # формат описания таблиц не соответствует ожиданию
+        raise ValueError("RAW table description doesn't match required format")
+
+    # разбор описания полей таблицы
     fields = collections.OrderedDict()
     # показывает, что в таблице есть поле типа RV
     # необходимо для корректного чтения файла данных
     row_version = False
-    description = onec_dtools.serialization.deserialize(raw_description)
-
-    for field_description in description[2][1:]:
-        name, field_type, null_exists, length, precision, case_sensitive = field_description
-        if field_type == 'RV':
+    for field_str in result.group(2).splitlines():
+        res = field_description_pattern.match(field_str)
+        if res is None:
+            raise ValueError("RAW field description doesn't match required format")
+        if res.group(2) == 'RV':
             row_version = True
-        fields[name] = FieldDescription(field_type, bool(null_exists), length, precision,
+        name, field_type, null_exists, length, precision, case_sensitive = res.groups()
+        fields[name] = FieldDescription(field_type, bool(int(null_exists)), int(length), int(precision),
                                         True if case_sensitive == 'CS' else False)
 
     # информация об индексах таблицы пока не имеет практического применения, поэтому ее не разбираем
-    return TableDescription(description[0], fields, description[4][1], row_version, *description[5][1:])
+    # текстовое описание индексов в result.group(3)
+
+    return TableDescription(result.group(1), fields, int(result.group(4)), row_version,
+                            *[int(x) for x in result.group(5).split(",")])
 
 
 class Database(object):
