@@ -9,18 +9,20 @@ NText = collections.namedtuple('NText', 'offset, size')
 Image = collections.namedtuple('Image', 'offset, size')
 
 
-def numeric_to_int(numeric, precision):
+def numeric_to_int(numeric, number_of_digits, precision):
     """Преобразуем Numeric формат 1С в число.
     :param numeric: число в формате numeric
+    :param number_of_digits: количество цифр в числе
     :param precision: точность
     """
     sign = {0: '-', 1: ''}
     hex_str = ''.join('{:02X}'.format(byte) for byte in numeric)
     if precision:
-        result = ''.join([sign.get(int(hex_str[0])), hex_str[1:-precision], '.', hex_str[-precision:]])
+        result = ''.join([sign.get(int(hex_str[0])), hex_str[1:-precision], '.',
+                          hex_str[number_of_digits+1-precision:number_of_digits+1]])
         return float(result)
     else:
-        result = ''.join([sign.get(int(hex_str[0])), hex_str[1:]])
+        result = ''.join([sign.get(int(hex_str[0])), hex_str[1:number_of_digits+1]])
         return int(result)
 
 
@@ -51,7 +53,7 @@ def get_field_parser_info(field_description):
     elif field_description.type == 'N':
         # Число
         return FieldParserInfo(field_description.length // 2 + 1,
-                               lambda x: numeric_to_int(x, field_description.precision))
+                               lambda x: numeric_to_int(x, field_description.length, field_description.precision))
     elif field_description.type == 'NC':
         # Строка фиксированной длины
         return FieldParserInfo(field_description.length * 2, lambda x: x.decode('utf-16'))
