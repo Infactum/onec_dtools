@@ -214,6 +214,8 @@ class Database(object):
                 continue
             parsed_row = row.parse(row_bytes)
             for field_name, field_type in unlimited_value_columns.items():
+                if parsed_row[field_name] is None:
+                    continue
                 gen = read_value_from_blob(self.db_file, table_description.blob_offset,
                                            parsed_row[field_name].offset, decorator(field_type))
                 parsed_row[field_name] = NValue(parsed_row[field_name].size, gen)

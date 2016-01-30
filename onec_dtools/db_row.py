@@ -85,7 +85,7 @@ def get_null_field_parser_info(field_description):
     fpi = get_field_parser_info(field_description)
     if field_description.null_exists:
         # Колонки с null_exists меняют значение в зависимости от 1го байта
-        return FieldParserInfo(fpi.length + 1, lambda x: None if x[0] == b'\x00' else fpi.conversion_fn(x[1:]))
+        return FieldParserInfo(fpi.length + 1, lambda x: None if x[0:1] == b'\x00' else fpi.conversion_fn(x[1:]))
     else:
         return fpi
 
