@@ -8,7 +8,7 @@ OneC Data Tools
     :target: https://pypi.python.org/pypi/onec_dtools
 .. image:: https://img.shields.io/pypi/l/onec_dtools.svg
     :target: https://pypi.python.org/pypi/onec_dtools
-.. image:: https://img.shields.io/travis/Infactum/onec_dtools.svg
+.. image:: https://img.shields.io/travis/Infactum/onec_dtools/master.svg
     :target: https://travis-ci.org/Infactum/onec_dtools
 .. image:: https://img.shields.io/coveralls/Infactum/onec_dtools.svg
     :target: https://coveralls.io/github/Infactum/onec_dtools
