@@ -17,8 +17,11 @@ def epoch2int(epoch_time):
     """
     Преобразует время в формате "количество секунд с начала эпохи" в количество сотых микросекундных интервалов
     с 0001.01.01
-    :param epoch_time: timestamp
+
+    :param epoch_time: время в формате Python
+    :type epoch_time: real
     :return: количество сотых микросекундных интервалов
+    :rtype: int
     """
     # Начало эпохи на разных системах - разная дата
     # Поэтому явно вычисляем разницу между указанной датой и 0001.01.01
@@ -29,7 +32,11 @@ def epoch2int(epoch_time):
 def int2hex(value):
     """
     Получает строковое представление целого числа в шестнадцатиричном формате длиной не менее 4 байт
+
     :param value: конвертируемое число
+    :type value: int
+    :return: предоставление числа
+    :type: string
     """
     return '{:02x}'.format(value).rjust(8, '0')
 
@@ -37,8 +44,11 @@ def int2hex(value):
 def get_size(file):
     """
     Возвращает размер file-like объекта
-    :param file:
-    :return:
+
+    :param file: объекта файла
+    :type file: BufferedReader
+    :return: размер в байтах
+    :rtype: int
     """
     pos = file.tell()
     file.seek(0, os.SEEK_END)
@@ -48,6 +58,12 @@ def get_size(file):
 
 
 class ContainerWriter(object):
+    """
+    Класс для записи контейнеров
+
+    :param file: объект файла контейнера
+    :type file: BufferedReader
+    """
     def __init__(self, file):
         self.file = file
         self.toc = []
@@ -55,16 +71,18 @@ class ContainerWriter(object):
     def write_header(self):
         """
         Записывает заголовок контейнера
-        :return:
+
         """
         self.file.write(pack('4i', END_MARKER, DEFAULT_BLOCK_SIZE, 0, 0))
 
     def write_block(self, data, **kwargs):
         """
         Записывает блок данных в контейнер
-        :param data:
-        :param kwargs:
-        :return:
+
+        :param data: file-like объект
+        :param kwargs: Опциональные параметры
+        :return: смещение записанных данных (байт)
+        :rtype: int
         """
         # размер данных блока
         size = kwargs.pop('size', get_size(data))
@@ -95,10 +113,13 @@ class ContainerWriter(object):
     def add_file(self, fd, name, inflate=False):
         """
         Добавляет файл в контейнер
+
         :param fd: file-like объект файла
+        :type fd: BufferedReader
         :param name: Имя файла в контейнере
+        :type name: string
         :param inflate: флаг сжатия
-        :return:
+        :type inflate: bool
         """
         modify_time = epoch2int(os.stat(fd.fileno()).st_mtime)
         # В *nix это не время создания файла.
@@ -126,7 +147,6 @@ class ContainerWriter(object):
     def write_toc(self):
         """
         Записывает оглавление контейнера
-        :return:
         """
         if len(self.toc) == 0:
             raise IOError('Container is empty')
@@ -152,21 +172,30 @@ class ContainerWriter(object):
                 self.write_block(io.BytesIO(f.read(DEFAULT_BLOCK_SIZE)), size=0)
 
     def __enter__(self):
+        """
+        Вход в блок. Позволяет применять оператор with.
+        """
         self.write_header()
         self.file.write(b'\x00' * (DEFAULT_BLOCK_SIZE + 31))
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Выход из блока. Позволяет применять оператор with.
+        """
         self.write_toc()
 
 
 def add_entries(container, folder, nested=False):
     """
     Рекурсивно добавляет файлы из директории в контейнер
-    :param container:
-    :param folder:
-    :param nested:
-    :return:
+
+    :param container: объет файла контейнера
+    :type container: BufferedReader
+    :param folder: каталог файлов, которые надо поместить в контейнер
+    :type folder: string
+    :param nested: обрабатывать вложенные каталоги
+    :type nested: bool
     """
     entries = sorted(os.listdir(folder))
     for entry in entries:
@@ -183,10 +212,13 @@ def add_entries(container, folder, nested=False):
 
 def build(folder, filename):
     """
-    Запакоывает каталог в контейре
-    :param folder:
-    :param filename:
-    :return:
+    Запакоывает каталог в контейнер включая вложенные каталоги.
+    Сахар для ContainerWriter.
+
+    :param folder: каталог с данными, запаковываемыми в контейнер
+    :type folder: string
+    :param filename: имя файла контейнера
+    :type filename: string
     """
     with open(filename, 'w+b') as f, ContainerWriter(f) as container:
         add_entries(container, folder)

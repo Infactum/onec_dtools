@@ -1,6 +1,6 @@
-===========
-onec_dtools
-===========
+===============
+OneC Data Tools
+===============
 
 .. image:: https://img.shields.io/pypi/v/onec_dtools.svg
     :target: https://pypi.python.org/pypi/onec_dtools
@@ -13,7 +13,7 @@ onec_dtools
 .. image:: https://img.shields.io/coveralls/Infactum/onec_dtools.svg
     :target: https://coveralls.io/github/Infactum/onec_dtools
 
-**onec_dtools** - библиотека для работы с файлами данных 1С:Предприятие 8 (1CD, cf, epf и т.д.) без использования
+**onec_dtools** - библиотека для работы с бинарными файлами 1С:Предприятие 8 (1CD, cf, epf и т.д.) без использования
 технологической платформы.
 
 Установка
@@ -26,17 +26,24 @@ onec_dtools
 Использование
 =============
 
-Полное описание применения библиотеки доступно в документации_.
+Полное описание всех возможностей библиотеки доступно в документации_.
+.. _документации: http://onec-dtools.readthedocs.org/ru/latest/
 
-Простой пример, демонстрирующий чтение таблицы V8USERS::
+Простой пример, демонстрирующий чтение всех данных (включая BLOB) из таблицы V8USERS::
 
     import onec_dtools
 
     with open('1Cv8.1CD', 'rb') as f:
-        db = onec_dtools.Database(f)
+        db = onec_dtools.DatabaseReader(f)
+        if row.is_empty:
+                continue
+        for row in db.tables['V8USERS']:
+            print(row.as_list(True))
 
-        table_name = 'V8USERS'
-        for row in db.read_table(table_name):
-            print(row)
+Распаковка и запаковки CF файла::
 
-.. _документации: http://onec-dtools.readthedocs.org/ru/latest/
+    import onec_dtools
+
+    onec_dtools.extract('D:/sample.cf', 'D:/unpack')
+    onec_dtools.build('D:/unpack', 'D:/repacked.cf')
+

@@ -16,8 +16,11 @@ File = collections.namedtuple('File', 'name, size, created, modified, data')
 def read_header(file):
     """
     Считывыет заголовок контейнера.
+
     :param file: объект файла контейнера
-    :return: объект заголовка контейнера
+    :type file: BufferedReader
+    :return: Заголовок контейнера
+    :rtype: Header
     """
     file.seek(0)
     fmt = '4i'
@@ -29,10 +32,15 @@ def read_header(file):
 def read_block(file, offset, max_data_length=None):
     """
     Считывает блок данных из контейнера.
+
     :param file: объект файла контейнера
-    :param offset: смещение блока в файле контейнера
-    :param max_data_length: максимальный размер считываемых данных из блока
+    :type file: BufferedReader
+    :param offset: смещение блока в файле контейнера (байт)
+    :type offset: int
+    :param max_data_length: максимальный размер считываемых данных из блока (байт)
+    :type max_data_length: int
     :return: объект блока данных
+    :rtype: Block
     """
     file.seek(offset)
     fmt = '2s8s1s8s1s8s1s2s'
@@ -56,8 +64,11 @@ def read_document_gen(file, offset):
     Создает генератор чтения данных документа в контейнере.
     Первое значение генератора - размер документа (байт).
     Остальные значения - данные блоков, составляющих документ
+
     :param file: объект файла контейнера
-    :param offset: смещение документа в контейнере
+    :type file: BufferedReader
+    :param offset: смещение документа в контейнере (байт)
+    :type offset: int
     :return: генератор чтения данных документа
     """
     file.seek(offset)
@@ -79,9 +90,13 @@ def read_document_gen(file, offset):
 def read_document(file, offset):
     """
     Считывает документ из контейнера. В качестве данных документа возвращается генератор.
+
     :param file: объект файла контейнера
+    :type file: BufferedReader
     :param offset: смещение документа в контейнере
+    :type offset: int
     :return: объект документа
+    :rtype: Document
     """
     gen = read_document_gen(file, offset)
     size = next(gen)
@@ -91,9 +106,13 @@ def read_document(file, offset):
 def read_full_document(file, offset):
     """
     Считывает документ из контейнера. Данные документа считываются целиком.
+
     :param file: объект файла контейнера
-    :param offset: смещение документа в контейнере
+    :type file: BufferedReader
+    :param offset: смещение документа в контейнере (байт)
+    :type offset: int
     :return: объект документа
+    :rtype: Document
     """
     document = read_document(file, offset)
     return Document(document.size, b''.join([chunk for chunk in document.data]))
@@ -102,8 +121,11 @@ def read_full_document(file, offset):
 def parse_datetime(time):
     """
     Преобразует внутренний формат хранения дат файлов в контейнере в обычную дату
-    :param time: строковое внутреннее представление даты
+
+    :param time: внутреннее представление даты
+    :type time: string
     :return: дата/время
+    :rtype: datetime
     """
     # TODO проверить работу на *nix, т.к там начало эпохи - другая дата
     return datetime.datetime(1, 1, 1) + datetime.timedelta(microseconds=time * 100)
@@ -111,9 +133,12 @@ def parse_datetime(time):
 
 def read_entries(file):
     """
-    Считывает оглавление контейнра
-    :param file:
-    :return:
+    Считывает оглавление контейнера
+
+    :param file: объект файла контейнера
+    :type file: BufferedReader
+    :return: словарь файлов в контейнере
+    :rtype: OrderedDict
     """
     # Первый документ после заголовка содержит оглавление
     doc = read_full_document(file, calcsize('4i'))
@@ -140,6 +165,9 @@ def read_entries(file):
 
 
 class ContainerReader(object):
+    """
+    Класс для чтения контейнеров
+    """
     def __init__(self, file):
         header = read_header(file)
         if header.default_block_size == 0:
@@ -148,15 +176,19 @@ class ContainerReader(object):
         self.file = file
         self.first_empty_block_offset = header.first_empty_block_offset
         self.default_block_size = header.default_block_size
+        #: Список файлов в контейнере
         self.entries = read_entries(self.file)
 
     def extract(self, path, deflate=False, recursive=False):
         """
-        Распаковывает содержимое контейнера в каталок
+        Распаковывает содержимое контейнера в каталог
+
         :param path: каталог распаковки
+        :type path: string
         :param deflate: разархивировать содержимое файлов
+        :type deflate: bool
         :param recursive: выполнять рекурсивно
-        :return:
+        :type recursive: bool
         """
         if os.path.exists(path) and os.path.isdir(path):
             # если необходимая директория уже есть, то она должна быть пустой
@@ -196,5 +228,13 @@ class ContainerReader(object):
 
 
 def extract(filename, folder):
+    """
+    Распаковка контейнера. Сахар для ContainerReader
+
+    :param filename: полное имя файла-контейнера
+    :type filename: string
+    :param folder: каталог назначения
+    :type folder: string
+    """
     with open(filename, 'rb') as f:
         ContainerReader(f).extract(folder, deflate=True, recursive=True)

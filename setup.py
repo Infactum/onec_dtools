@@ -8,14 +8,14 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='onec_dtools',
-    version='0.1.1',
+    version='0.3.0',
     packages=['onec_dtools'],
     test_requires=['pytest'],
     url='https://github.com/Infactum/onec_dtools',
     license='MIT',
     author='infactum',
     author_email='infactum@gmail.com',
-    description='Tools for working with 1C:Enterprise data files',
+    description='Tools for working with 1C:Enterprise binary files',
     long_description=long_description,
     classifiers=[
         'Development Status :: 3 - Alpha',
@@ -27,5 +27,5 @@ setup(
         'Topic :: Software Development',
         'Topic :: Database'
     ],
-    keywords='1C 1C:Enterprise 1CD'
+    keywords='1C 1C:Enterprise 1CD CF EPF ERF V8UNPACK'
 )

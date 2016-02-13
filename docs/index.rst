@@ -1,7 +1,7 @@
 Документация onec_dtools
 ========================
 
-**onec_dtools** - это python модуль для работы с файлами данных 1С:Предприятие 8 без использования
+**onec_dtools** - это python модуль для работы с бинарными файлами 1С:Предприятие 8 без использования
 технологической платформы.
 
 Основные возможности:
@@ -16,6 +16,7 @@
 
     installation
     usage
+    modules
     versions
 
 Сайты onec_dtools
@@ -27,20 +28,12 @@
         * http://infostart.ru/public/418553/
         * http://infostart.ru/public/412475/
 
-    * Страница проекта в PyPI:
-        https://pypi.python.org/pypi/onec_dtools/
+    * Страница проекта в PyPI: https://pypi.python.org/pypi/onec_dtools/
 
 ..    Indices and tables
     ==================
     * :ref:`genindex`
     * :ref:`modindex`
     * :ref:`search`
-
-..    Autodoc
-    =======
-    .. automodule:: onec_dtools
-    :special-members: __init__
-    :members:
-    :undoc-members:
 
 

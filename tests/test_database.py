@@ -14,13 +14,13 @@ def db_file(request):
 
 def test_parse_whole_db(db_file):
     """
-    Тест полностью прочитает всю БД
+    Дымовой тест полного чтения всех таблиц БД
     """
-    db = onec_dtools.Database(db_file)
-    for table in db.description:
-        for row in db.read_table(table):
-            for value in row.values():
+    db = onec_dtools.DatabaseReader(db_file)
+    for table_name, table_desc in db.tables.items():
+        for row in db.tables[table_name]:
+            for field in table_desc.fields:
+                field_value = row[field]
                 # Чтение полей неограниченной длины
-                if hasattr(value, 'data'):
-                    for _ in value.data:
-                        pass
+                if hasattr(field_value, 'value'):
+                    _ = field_value.value
