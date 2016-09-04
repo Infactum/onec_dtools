@@ -3,8 +3,8 @@ from struct import unpack, calcsize
 import collections
 import re
 import datetime as dt
+import math
 
-PAGE_SIZE = 4096
 ROOT_OBJECT_OFFSET = 2
 BLOB_CHUNK_SIZE = 256
 
@@ -46,52 +46,75 @@ def database_header(db_file):
     """
     Читает заголовок файла БД
 
-    :param db_file: Объект файла БД
-    :type db_file: BufferedReader
     :return: версия и число страниц
     :rtype: tuple
     """
-    fmt = '8s4bI'
+    fmt = '8s4bIi'
     buffer = db_file.read(calcsize(fmt))
     data = unpack(fmt, buffer)
 
-    return ".".join([str(v) for v in data[1:5]]), data[5]
+    version = ".".join([str(v) for v in data[1:5]])
+    if version not in ['8.2.14.0', '8.3.8.0']:
+        error_text = 'Database file has unsupported format version {}'.format(version)
+        raise NotImplementedError(error_text)
+
+    total_pages = data[5]
+
+    page_size = 4096
+    if version == '8.3.8.0':
+        fmt = 'I'
+        buffer = db_file.read(calcsize(fmt))
+        page_size = unpack(fmt, buffer)[0]
+
+    return version, total_pages, page_size
 
 
-def root_object(db_file):
+def root_object(db_file, db_description):
     """
     Читает корневой объет БД
 
     :param db_file: Объект файла БД
     :type db_file: BufferedReader
+    :param db_description: Объект описания БД
+    :type db_description: DBDescription
     :return: язык и смещения объектов описания таблиц БД
     :rtype: tuple
     """
-    buffer = DBObject(db_file, ROOT_OBJECT_OFFSET).read()
+
+    if db_description.version == '8.3.8.0':
+        db_object = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET)
+        buffer = Blob(db_file, db_description, len(db_object), ROOT_OBJECT_OFFSET, 1, 'I').value
+    else:
+        buffer = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET).read()
 
     fmt = '32si'
     header_size = calcsize(fmt)
     locale, tables_count = unpack(fmt, buffer[:header_size])
 
     fmt = ''.join([str(tables_count), 'i'])
-    tables_offsets = unpack(fmt, buffer[header_size:header_size + calcsize(fmt)])
+    offsets = unpack(fmt, buffer[header_size:header_size + calcsize(fmt)])
 
-    return locale.decode('utf-8').rstrip('\x00'), tables_offsets
+    return locale.decode('utf-8').rstrip('\x00'), offsets
 
 
-def raw_tables_descriptions(db_file, tables_offsets):
+def raw_tables_descriptions(db_file, db_description, offsets):
     """
     Получает описания таблиц БД во внутренне формате 1С.
 
     :param db_file: Объект файла БД
     :type db_file: BufferedReader
-    :param tables_offsets: Cмещения объектов описания таблиц БД
-    :type tables_offsets: tuple
+    :param offsets: Cмещения объектов описания таблиц БД
+    :type offsets: tuple
     :return: Описания таблиц
     :rtype: list
     """
-    return [(lambda x: x.decode('utf-16'))(DBObject(db_file, offset).read())
-            for offset in tables_offsets]
+    if db_description.version == '8.3.8.0':
+        db_object = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET)
+        return [(lambda x: x.decode('utf-8'))(Blob(db_file, db_description, len(db_object), ROOT_OBJECT_OFFSET, offset, 'I').value)
+                for offset in offsets]
+    else:
+        return [(lambda x: x.decode('utf-16'))(DBObject(db_file, db_description, offset).read())
+                for offset in offsets]
 
 
 def calc_field_size(field_type, length):
@@ -185,32 +208,115 @@ def bytes_to_datetime(bts):
                        int(date_string[8:10]), int(date_string[10:12]), int(date_string[12:]))
 
 
+class DBDescription(object):
+    """
+    Описание файла БД
+
+    :param db_file: Объект файла БД
+    :type db_file: BufferedReader
+    """
+    def __init__(self, db_file):
+
+        version, total_pages, page_size = database_header(db_file)
+
+        #: Версия формата
+        self.version = version
+        #: Количество страниц в БД
+        self.total_pages = total_pages
+        #: Размер страницы
+        self.page_size = page_size
+
+        locale, tables_offsets = root_object(db_file, self)
+        #: Язык БД
+        self.locale = locale
+        #: Cмещения объектов описания таблиц БД
+        self.tables_offsets = tables_offsets
+
+
 class DBObject(object):
     """
     Объект БД
 
     :param db_file: Объект файла БД
     :type db_file: BufferedReader
+    :param db_description: Объект описания БД
+    :type db_description: DBDescription
     :param object_offset: смещение объекта БД относительно начала файла БД (в страницах)
     :type object_offset: int
     """
-    def __init__(self, db_file, object_offset):
+    def __init__(self, db_file, db_description, object_offset):
         self._db_file = db_file
-        self._db_file.seek(PAGE_SIZE * object_offset)
+        self._db_version = db_description.version
+        self._page_size = db_description.page_size
+        self._db_file.seek(self._page_size * object_offset)
 
-        buffer = self._db_file.read(PAGE_SIZE)
-        data = unpack('8s3iI1018I', buffer)
-        self._length = data[1]
-
-        index_pages_count = (data[1] - 1) // (1023 * PAGE_SIZE) + 1
-        index_pages_offsets = [data[5 + i] for i in range(index_pages_count)]
         self._data_pages_offsets = []
+        self._length = 0
 
-        for offset in index_pages_offsets:
-            self._db_file.seek(PAGE_SIZE * offset)
-            buffer = self._db_file.read(PAGE_SIZE)
-            data = unpack('i1023I', buffer)
-            self._data_pages_offsets += [data[i + 1] for i in range(data[0])]
+        if db_description.version == '8.3.8.0':
+
+            fmt = ''.join(['2sH3IQ', str((self._page_size - calcsize('2sH3IQ')) // calcsize('I')), 'I'])
+            buffer = self._db_file.read(self._page_size)
+            data = unpack(fmt, buffer)
+
+            # Сигнатура объекта БД версии 8.3.8
+            sig = data[0]
+
+            if sig == b'\x1C\xFD':
+                # Основные объекты
+
+                # Количество промежуточных слоев таблицы размещения
+                fat_level = data[1]
+                self._length = data[5]
+
+                if fat_level == 0:
+                    data_pages_count = math.ceil(self._length / self._page_size)
+                    self._data_pages_offsets += [data[6 + i] for i in range(data_pages_count)]
+                elif fat_level == 1:
+                    index_pages_offsets = []
+                    for i in range(6, len(data)):
+                        if data[i] == 0:
+                            break
+                        index_pages_offsets.append(data[i])
+
+                    for offset in index_pages_offsets:
+                        self._db_file.seek(self._page_size * offset)
+                        buffer = self._db_file.read(self._page_size)
+                        fmt = ''.join([str(self._page_size // calcsize('I')), 'I'])
+                        data = unpack(fmt, buffer)
+                        for value in data:
+                            if value == 0:
+                                break
+                            self._data_pages_offsets.append(value)
+                else:
+                    raise NotImplementedError('fat_level {} not supported'.format(fat_level))
+
+            elif sig == b'\x1C\xFF':
+                # Объект описания свободных блоков
+                error_text = 'Reading of {} type objects is not yet supported'.format(sig)
+                raise NotImplementedError(error_text)
+            else:
+                raise BufferError('Object signature unknown')
+        else:
+            # Версия формата БД ранее 8.3.8
+
+            assert self._page_size == 4096
+
+            buffer = self._db_file.read(self._page_size)
+            data = unpack('8s3iI1018I', buffer)
+
+            assert data[0] == b'1CDBOBV8'
+
+            self._length = data[1]
+
+            index_pages_count = (data[1] - 1) // (1023 * self._page_size) + 1
+            index_pages_offsets = [data[5 + i] for i in range(index_pages_count)]
+
+            for offset in index_pages_offsets:
+                self._db_file.seek(self._page_size * offset)
+                buffer = self._db_file.read(self._page_size)
+                data = unpack('i1023I', buffer)
+                self._data_pages_offsets += [data[i + 1] for i in range(data[0])]
 
         # Индекс текущей страницы данных
         self._current_data_page = 0
@@ -228,7 +334,7 @@ class DBObject(object):
         """
         buffer = []
         # Байт от текущей позиции внутри объета до конца значимых данных
-        total_bytes_left = self._length - self._current_data_page * PAGE_SIZE - self._pos_on_page
+        total_bytes_left = self._length - self._current_data_page * self._page_size - self._pos_on_page
 
         # Определяем сколько всего байт нужно прочитать
         if size < 0:
@@ -240,10 +346,10 @@ class DBObject(object):
 
         while bytes_left:
             # Позиционируемся внутри текущей страницы с данными
-            self._db_file.seek(PAGE_SIZE * self._data_pages_offsets[self._current_data_page] + self._pos_on_page)
+            self._db_file.seek(self._page_size * self._data_pages_offsets[self._current_data_page] + self._pos_on_page)
             # Определяем сколько байт возможно прочитать: до конца страницы или до оставшегося числа байт
-            max_read = min(PAGE_SIZE - self._pos_on_page, bytes_left)
-            if max_read + self._pos_on_page == PAGE_SIZE:
+            max_read = min(self._page_size - self._pos_on_page, bytes_left)
+            if max_read + self._pos_on_page == self._page_size:
                 # Полностью считали страницу данных - переходим на следующую
                 self._current_data_page += 1
                 self._pos_on_page = 0
@@ -266,9 +372,9 @@ class DBObject(object):
             raise IndexError('Position is outside of object')
 
         # страница данных на которых расположена нужная позиция
-        self._current_data_page = pos // PAGE_SIZE
+        self._current_data_page = pos // self._page_size
         # смещение внутри страницы данных
-        self._pos_on_page = pos % PAGE_SIZE
+        self._pos_on_page = pos % self._page_size
 
     def __len__(self):
         """
@@ -289,8 +395,9 @@ class Table(object):
     :param description: Описание таблицы во внутреннем формате 1С
     :type description: string
     """
-    def __init__(self, db_file, description):
+    def __init__(self, db_file, db_description, description):
         self._db_file = db_file
+        self._db_description = db_description
         self._db_object = None
 
         result = table_description_pattern.match(description)
@@ -334,7 +441,7 @@ class Table(object):
     @property
     def _data_object(self):
         if self._db_object is None:
-            self._db_object = DBObject(self._db_file, self.data_offset)
+            self._db_object = DBObject(self._db_file, self._db_description, self.data_offset)
         return self._db_object
 
     def __len__(self):
@@ -359,7 +466,7 @@ class Table(object):
             row_bytes = self._data_object.read(self._row_length)
             if not row_bytes:
                 break
-            yield Row(self._db_file, row_bytes, self)
+            yield Row(self._db_file, self._db_description, row_bytes, self)
 
     def __getitem__(self, key):
         """
@@ -375,7 +482,7 @@ class Table(object):
                 raise IndexError('Index outside of table length')
             self._db_object.seek(self._row_length * key)
             row_bytes = self._db_object.read(self._row_length)
-            return Row(self._db_file, row_bytes, self)
+            return Row(self._db_file, self._db_description, row_bytes, self)
         else:
             raise TypeError('Index must be int')
 
@@ -391,10 +498,11 @@ class Row(object):
     :param table: Таблица БД, которой принадлежит строка.
     :type table: Table
     """
-    def __init__(self, db_file, row_bytes, table):
+    def __init__(self, db_file, db_description, row_bytes, table):
         self._row_bytes = row_bytes
         #: Флаг пустой строки. Все поля пустой строки равны None
         self.is_empty = row_bytes[:1] == b'\x01'
+        self._db_description = db_description
         self._db_file = db_file
         self._fields = table.fields
         self._blob_offset = table.blob_offset
@@ -431,7 +539,7 @@ class Row(object):
             return '.'.join(str(i) for i in unpack('4i', buffer))
         elif field.type in ['NT', 'I']:
             offset, size = unpack('2I', buffer)
-            return Blob(self._db_file, size, self._blob_offset, offset, field.type)
+            return Blob(self._db_file, self._db_description, size, self._blob_offset, offset, field.type)
         elif field.type == 'DT':
             return bytes_to_datetime(buffer)
 
@@ -508,10 +616,10 @@ class Blob(object):
     :param field_type: тип поля неограниченной длины (I или NT)
     :type field_type: string
     """
-    def __init__(self, db_file, blob_size, blob_offset, blob_chunk_offset, field_type):
+    def __init__(self, db_file, db_description, blob_size, blob_offset, blob_chunk_offset, field_type):
         self._db_file = db_file
         self._size = blob_size
-        self._db_object = DBObject(db_file, blob_offset)
+        self._db_object = DBObject(db_file, db_description, blob_offset)
         self._blob_chunk_offset = blob_chunk_offset
         self._field_type = field_type
         self._value = None
@@ -574,21 +682,7 @@ class DatabaseReader(object):
     def __init__(self, db_file):
         self._db_file = db_file
 
-        version, total_pages = database_header(db_file)
-
-        #: Версия формата
-        self.version = version
-        #: Количество страниц в БД
-        self.total_pages = total_pages
-
-        if self.version != '8.2.14.0':
-            error_text = 'Only 8.2.14.0 database version is supported now!. ' \
-                         'Your base version is {}'.format(self.version)
-            raise NotImplementedError(error_text)
-
-        locale, tables_offsets = root_object(db_file)
-        #: Язык БД
-        self.locale = locale
+        self.db_description = DBDescription(db_file)
 
         self.tables = collections.OrderedDict()
         """
@@ -598,6 +692,6 @@ class DatabaseReader(object):
 
         Значение: Объект класса **Table**
         """
-        for raw_description in raw_tables_descriptions(db_file, tables_offsets):
-            table = Table(db_file, raw_description)
+        for raw_description in raw_tables_descriptions(self._db_file, self.db_description, self.db_description.tables_offsets):
+            table = Table(self._db_file, self.db_description, raw_description)
             self.tables[table.name] = table
