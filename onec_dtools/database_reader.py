@@ -46,6 +46,8 @@ def database_header(db_file):
     """
     Читает заголовок файла БД
 
+    :param db_file: Объект файла БД
+    :type db_file: BufferedReader
     :return: версия и число страниц
     :rtype: tuple
     """
@@ -69,52 +71,42 @@ def database_header(db_file):
     return version, total_pages, page_size
 
 
-def root_object(db_file, db_description):
+def root_object(db_file, version, page_size):
     """
     Читает корневой объет БД
 
     :param db_file: Объект файла БД
     :type db_file: BufferedReader
-    :param db_description: Объект описания БД
-    :type db_description: DBDescription
-    :return: язык и смещения объектов описания таблиц БД
+    :param version: Версия формата БД
+    :type version: str
+    :param page_size: Размер страницы БД
+    :type page_size: int
+    :return: язык, описание таблиц БД во внутреннем формате 1С
     :rtype: tuple
     """
-
-    if db_description.version == '8.3.8.0':
-        db_object = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET)
-        buffer = Blob(db_file, db_description, len(db_object), ROOT_OBJECT_OFFSET, 1, 'I').value
+    db_object = DBObject(db_file, version, page_size, ROOT_OBJECT_OFFSET)
+    if version == '8.3.8.0':
+        buffer = Blob(db_file, version, page_size, len(db_object), ROOT_OBJECT_OFFSET, 1, 'I').value
     else:
-        buffer = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET).read()
+        buffer = db_object.read()
 
     fmt = '32si'
     header_size = calcsize(fmt)
     locale, tables_count = unpack(fmt, buffer[:header_size])
+    locale = locale.decode('utf-8').rstrip('\x00')
 
     fmt = ''.join([str(tables_count), 'i'])
     offsets = unpack(fmt, buffer[header_size:header_size + calcsize(fmt)])
 
-    return locale.decode('utf-8').rstrip('\x00'), offsets
-
-
-def raw_tables_descriptions(db_file, db_description, offsets):
-    """
-    Получает описания таблиц БД во внутренне формате 1С.
-
-    :param db_file: Объект файла БД
-    :type db_file: BufferedReader
-    :param offsets: Cмещения объектов описания таблиц БД
-    :type offsets: tuple
-    :return: Описания таблиц
-    :rtype: list
-    """
-    if db_description.version == '8.3.8.0':
-        db_object = DBObject(db_file, db_description, ROOT_OBJECT_OFFSET)
-        return [(lambda x: x.decode('utf-8'))(Blob(db_file, db_description, len(db_object), ROOT_OBJECT_OFFSET, offset, 'I').value)
-                for offset in offsets]
+    if version == '8.3.8.0':
+        tables_descriptions = [(lambda x: x.decode('utf-8'))(
+            Blob(db_file, version, page_size, len(db_object), ROOT_OBJECT_OFFSET, offset, 'I').value)
+                               for offset in offsets]
     else:
-        return [(lambda x: x.decode('utf-16'))(DBObject(db_file, db_description, offset).read())
-                for offset in offsets]
+        tables_descriptions = [(lambda x: x.decode('utf-16'))(DBObject(db_file, version, page_size, offset).read())
+                               for offset in offsets]
+
+    return locale, tables_descriptions
 
 
 def calc_field_size(field_type, length):
@@ -226,7 +218,7 @@ class DBDescription(object):
         #: Размер страницы
         self.page_size = page_size
 
-        locale, tables_offsets = root_object(db_file, self)
+        locale, tables_offsets = root_object(db_file, self.version, self.page_size)
         #: Язык БД
         self.locale = locale
         #: Cмещения объектов описания таблиц БД
@@ -239,21 +231,23 @@ class DBObject(object):
 
     :param db_file: Объект файла БД
     :type db_file: BufferedReader
-    :param db_description: Объект описания БД
-    :type db_description: DBDescription
+    :param version: Версия формата БД
+    :type version: str
+    :param page_size: Размер страницы БД
+    :type page_size: int
     :param object_offset: смещение объекта БД относительно начала файла БД (в страницах)
     :type object_offset: int
     """
-    def __init__(self, db_file, db_description, object_offset):
+    def __init__(self, db_file, version, page_size, object_offset):
         self._db_file = db_file
-        self._db_version = db_description.version
-        self._page_size = db_description.page_size
+        self._version = version
+        self._page_size = page_size
         self._db_file.seek(self._page_size * object_offset)
 
         self._data_pages_offsets = []
         self._length = 0
 
-        if db_description.version == '8.3.8.0':
+        if self._version == '8.3.8.0':
 
             fmt = ''.join(['2sH3IQ', str((self._page_size - calcsize('2sH3IQ')) // calcsize('I')), 'I'])
             buffer = self._db_file.read(self._page_size)
@@ -395,9 +389,10 @@ class Table(object):
     :param description: Описание таблицы во внутреннем формате 1С
     :type description: string
     """
-    def __init__(self, db_file, db_description, description):
+    def __init__(self, db_file, version, page_size, description):
         self._db_file = db_file
-        self._db_description = db_description
+        self._version = version
+        self._page_size = page_size
         self._db_object = None
 
         result = table_description_pattern.match(description)
@@ -441,7 +436,7 @@ class Table(object):
     @property
     def _data_object(self):
         if self._db_object is None:
-            self._db_object = DBObject(self._db_file, self._db_description, self.data_offset)
+            self._db_object = DBObject(self._db_file, self._version, self._page_size, self.data_offset)
         return self._db_object
 
     def __len__(self):
@@ -466,7 +461,7 @@ class Table(object):
             row_bytes = self._data_object.read(self._row_length)
             if not row_bytes:
                 break
-            yield Row(self._db_file, self._db_description, row_bytes, self)
+            yield Row(self._db_file, self._version, self._page_size, row_bytes, self)
 
     def __getitem__(self, key):
         """
@@ -482,7 +477,7 @@ class Table(object):
                 raise IndexError('Index outside of table length')
             self._db_object.seek(self._row_length * key)
             row_bytes = self._db_object.read(self._row_length)
-            return Row(self._db_file, self._db_description, row_bytes, self)
+            return Row(self._db_file, self._version, self._page_size, row_bytes, self)
         else:
             raise TypeError('Index must be int')
 
@@ -498,11 +493,12 @@ class Row(object):
     :param table: Таблица БД, которой принадлежит строка.
     :type table: Table
     """
-    def __init__(self, db_file, db_description, row_bytes, table):
+    def __init__(self, db_file, version, page_size, row_bytes, table):
         self._row_bytes = row_bytes
         #: Флаг пустой строки. Все поля пустой строки равны None
         self.is_empty = row_bytes[:1] == b'\x01'
-        self._db_description = db_description
+        self._version = version
+        self._page_size = page_size
         self._db_file = db_file
         self._fields = table.fields
         self._blob_offset = table.blob_offset
@@ -539,7 +535,7 @@ class Row(object):
             return '.'.join(str(i) for i in unpack('4i', buffer))
         elif field.type in ['NT', 'I']:
             offset, size = unpack('2I', buffer)
-            return Blob(self._db_file, self._db_description, size, self._blob_offset, offset, field.type)
+            return Blob(self._db_file, self._version, self._page_size, size, self._blob_offset, offset, field.type)
         elif field.type == 'DT':
             return bytes_to_datetime(buffer)
 
@@ -616,10 +612,10 @@ class Blob(object):
     :param field_type: тип поля неограниченной длины (I или NT)
     :type field_type: string
     """
-    def __init__(self, db_file, db_description, blob_size, blob_offset, blob_chunk_offset, field_type):
+    def __init__(self, db_file, version, page_size, blob_size, blob_offset, blob_chunk_offset, field_type):
         self._db_file = db_file
         self._size = blob_size
-        self._db_object = DBObject(db_file, db_description, blob_offset)
+        self._db_object = DBObject(db_file, version, page_size, blob_offset)
         self._blob_chunk_offset = blob_chunk_offset
         self._field_type = field_type
         self._value = None
@@ -664,7 +660,7 @@ class Blob(object):
         while True:
             # Читаем блоки BLOB
             buffer = self._db_object.read(BLOB_CHUNK_SIZE)
-            next_block, size, data = unpack('Ih250s', buffer)
+            next_block, size, data = unpack('Ih250s', bytes(buffer))
 
             yield data[:size]
 
@@ -682,7 +678,18 @@ class DatabaseReader(object):
     def __init__(self, db_file):
         self._db_file = db_file
 
-        self.db_description = DBDescription(db_file)
+        version, total_pages, page_size = database_header(db_file)
+
+        #: Версия формата
+        self.version = version
+        #: Количество страниц в БД
+        self.total_pages = total_pages
+        #: Размер страницы
+        self.page_size = page_size
+
+        locale, tables_descriptions = root_object(db_file, self.version, self.page_size)
+        #: Язык БД
+        self.locale = locale
 
         self.tables = collections.OrderedDict()
         """
@@ -692,6 +699,6 @@ class DatabaseReader(object):
 
         Значение: Объект класса **Table**
         """
-        for raw_description in raw_tables_descriptions(self._db_file, self.db_description, self.db_description.tables_offsets):
-            table = Table(self._db_file, self.db_description, raw_description)
+        for description in tables_descriptions:
+            table = Table(self._db_file, self.version, self.page_size, description)
             self.tables[table.name] = table
