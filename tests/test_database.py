@@ -5,7 +5,11 @@ import pytest
 import onec_dtools
 
 
-@pytest.yield_fixture(params=['Platform8Demo/1Cv8.1CD'])
+@pytest.yield_fixture(params=[
+    'Platform8Demo/8-2-14.1CD',
+    'Platform8Demo/8-3-8_4K.1CD',
+    'Platform8Demo/8-3-8_8K.1CD'
+])
 def db_file(request):
     file_path = os.path.join(sys.path[0], 'fixtures', request.param)
     with open(file_path, 'rb') as f:
