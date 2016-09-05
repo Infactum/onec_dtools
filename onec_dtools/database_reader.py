@@ -200,31 +200,6 @@ def bytes_to_datetime(bts):
                        int(date_string[8:10]), int(date_string[10:12]), int(date_string[12:]))
 
 
-class DBDescription(object):
-    """
-    Описание файла БД
-
-    :param db_file: Объект файла БД
-    :type db_file: BufferedReader
-    """
-    def __init__(self, db_file):
-
-        version, total_pages, page_size = database_header(db_file)
-
-        #: Версия формата
-        self.version = version
-        #: Количество страниц в БД
-        self.total_pages = total_pages
-        #: Размер страницы
-        self.page_size = page_size
-
-        locale, tables_offsets = root_object(db_file, self.version, self.page_size)
-        #: Язык БД
-        self.locale = locale
-        #: Cмещения объектов описания таблиц БД
-        self.tables_offsets = tables_offsets
-
-
 class DBObject(object):
     """
     Объект БД
