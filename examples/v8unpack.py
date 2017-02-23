@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 Пример распаковки/упаковки контейнеров (cf/epf/ert) при помощь onec_dtools
 Функционал аналогичен C++ версии v8unpack
@@ -5,7 +7,6 @@
 Copyright (c) 2016 infactum
 """
 
-# -*- coding: utf-8 -*-
 import argparse
 import sys
 from onec_dtools import extract, build

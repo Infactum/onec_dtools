@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
+
 """
 Пример распаковки efd файла поставки
 
 Copyright (c) 2017 infactum
 """
 
-# -*- coding: utf-8 -*-
 import argparse
 import sys
 import onec_dtools

@@ -1,10 +1,11 @@
+# -*- coding: utf-8 -*-
+
 """
 Пример чтения данных о пользователях файловой ИБ (с распаковкой хэшей) при помощь onec_dtools
 
 Copyright (c) 2016 infactum
 """
 
-# -*- coding: utf-8 -*-
 import binascii
 import re
 import base64
