@@ -13,8 +13,8 @@ OneC Data Tools
 .. image:: https://img.shields.io/coveralls/Infactum/onec_dtools.svg
     :target: https://coveralls.io/github/Infactum/onec_dtools
 
-**onec_dtools** - библиотека для работы с бинарными файлами 1С:Предприятие 8 (1CD, cf, epf и т.д.) без использования
-технологической платформы.
+**onec_dtools** - библиотека для работы с бинарными файлами 1С:Предприятие 8 (1CD, cf, epf, efd и т.д.) без
+использования технологической платформы.
 
 Установка
 =========

@@ -23,7 +23,6 @@ database_reader
 .. autoclass:: FieldDescription
 .. autofunction:: database_header
 .. autofunction:: root_object
-.. autofunction:: raw_tables_descriptions
 .. autofunction:: calc_field_size
 .. autofunction:: numeric_to_int
 .. autofunction:: nvc_to_string
@@ -56,5 +55,15 @@ container_writer
 .. autofunction:: epoch2int
 .. autofunction:: int2hex
 .. autofunction:: get_size
+
+supply_reader
+-------------
+.. py:currentmodule:: onec_dtools.supply_reader
+
+.. autoclass:: SupplyReader
+    :members:
+.. autofunction:: read_string
+.. autofunction:: read_supply_info
+.. autofunction:: read_included_file_info
 
 
