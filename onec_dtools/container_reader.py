@@ -5,6 +5,9 @@ import datetime
 import zlib
 import os
 
+import threading
+import time
+
 # INT32_MAX
 END_MARKER = 2147483647
 Header = collections.namedtuple('Header', 'first_empty_block_offset, default_block_size')
@@ -196,35 +199,80 @@ class ContainerReader(object):
 
         os.makedirs(path)
 
+        threads = []
+
         for filename, file_obj in self.entries.items():
-            file_path = os.path.join(path, filename)
+            async_writer = AsyncWriteChunk(path, filename, file_obj)
+            async_writer.deflate = deflate
+            async_writer.recursive = recursive
+            async_writer.run()
+
+            threads.append(async_writer)
+
+        # ждём окончания записи всех потоков этого уровня..
+        is_not_done = True
+        while is_not_done:
+            is_not_done = False
+            for t in threads:
+                if t.state != "done":
+                    is_not_done = True
+                    break
+            time.sleep(0.0001)
+
+
+# Inherting the base class 'Thread'
+class AsyncWriteChunk(threading.Thread):
+
+    deflate = False
+    recursive = False
+    file_is_container = False
+
+    def __init__(self, path, filename, file_obj):
+        # calling superclass init
+        threading.Thread.__init__(self)
+        self.path = path
+        self.filename = filename
+        self.file_obj = file_obj
+
+        self.state = "init"
+        self.is_container = False
+
+    def run(self):
+
+        self.state = "run"
+
+        file_path = os.path.join(self.path, self.filename)
+
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+
             with open(file_path, 'wb') as f:
-                if deflate:
+            if self.deflate:
                     # wbits = -15 т.к. у архивированных файлов нет заголовоков
                     decompressor = zlib.decompressobj(-15)
-                    for chunk in file_obj.data:
+                for chunk in self.file_obj.data:
                         decomressed_chunk = decompressor.decompress(chunk)
                         f.write(decomressed_chunk)
                 else:
-                    for chunk in file_obj.data:
+                for chunk in self.file_obj.data:
                         f.write(chunk)
 
-            if not recursive:
-                continue
-
+        if self.recursive:
             # Каждый файл внутри контейнера может быть контейнером
             # Для проверки является ли файл контейнером проверим первые 4 бита
             # Способ проверки ненадежный - нужно придумать что-то другое
-            file_is_container = False
             with open(file_path, 'rb') as f:
                 if f.read(4) == b'\xFF\xFF\xFF\x7F':
-                    file_is_container = True
-            if file_is_container:
+                    self.file_is_container = True
+
+            if self.file_is_container:
                 temp_name = file_path + '.tmp'
                 os.rename(file_path, temp_name)
                 with open(temp_name, 'rb') as f:
                     ContainerReader(f).extract(file_path, recursive=True)
                 os.remove(temp_name)
+
+        self.state = "done"
 
 
 def extract(filename, folder):
