@@ -246,16 +246,16 @@ class AsyncWriteChunk(threading.Thread):
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 
-            with open(file_path, 'wb') as f:
+        with open(file_path, 'wb') as f:
             if self.deflate:
-                    # wbits = -15 т.к. у архивированных файлов нет заголовоков
-                    decompressor = zlib.decompressobj(-15)
+                # wbits = -15 т.к. у архивированных файлов нет заголовоков
+                decompressor = zlib.decompressobj(-15)
                 for chunk in self.file_obj.data:
-                        decomressed_chunk = decompressor.decompress(chunk)
-                        f.write(decomressed_chunk)
-                else:
+                    decomressed_chunk = decompressor.decompress(chunk)
+                    f.write(decomressed_chunk)
+            else:
                 for chunk in self.file_obj.data:
-                        f.write(chunk)
+                    f.write(chunk)
 
         if self.recursive:
             # Каждый файл внутри контейнера может быть контейнером
